@@ -8,7 +8,6 @@
 ::
 
 
-
 @echo off
 setlocal EnableDelayedExpansion
 
@@ -123,7 +122,7 @@ goto :eof
 
 :get_pod
 set "options=^"[Return to Main^]" "disk_use" "exec" "logs" "labels" "manifest" "describe""
-set "header=%MSG_PREFIX% POD > Inspect:"
+set "header=%MSG_PREFIX% Inspect POD:"
 call :select_prompt 1 || exit /b 1
 if "%selected%"=="[Return to Main]" exit /b 0
 
@@ -214,7 +213,7 @@ goto :eof
 
 :get_service
 set "options=^"[Return to Main^]" "labels" "manifest" "describe""
-set "header=%MSG_PREFIX% SERVICE > Inspect:"
+set "header=%MSG_PREFIX% Inspect SERVICE:"
 call :select_prompt 1 || exit /b 1
 
 set "service_option=%selected%"
@@ -268,7 +267,7 @@ goto :eof
 
 :get_node
 set "options=^"[Return to Main^]" "list-wide" "describe" "labels""
-set "header=%MSG_PREFIX% NODE > Inspect:"
+set "header=%MSG_PREFIX% Inspect NODE:"
 call :select_prompt 1 || exit /b 1
 if "%selected%"=="[Return to Main]" exit /b 0
 
@@ -319,7 +318,7 @@ goto :eof
 
 :get_secret
 set "options=^"[Return to Main^]" "data" "labels" "manifest" "describe""
-set "header=%MSG_PREFIX% SECRET > Inspect:"
+set "header=%MSG_PREFIX% Inspect SECRET:"
 call :select_prompt 1 || exit /b 1
 if "%selected%"=="[Return to Main]" exit /b 0
 
@@ -406,12 +405,12 @@ set "index="
 set "list="
 for /f "usebackq delims=" %%a in (`!listing_command!`) do set "raw_json=%%a"
 
-:: remove leading and trailing curly braces '{ ... }'
-set "raw_json=!raw_json:~1,-1!"
+:: remove leading and trailing curly braces '{ ... }' and comma ',' character
+set "raw_json=%raw_json:~1,-1%"
+set "raw_json=%raw_json:,= %"
 
-for /f "usebackq tokens=1* delims==" %%A in (`set val_ 2^>nul`) do set "%%A="
+for %%I in (%raw_json%) do (
 
-for %%I in (%raw_json:,= %) do (
     set /a index+=1
     for /f "tokens=1* delims=:" %%K in ("%%I") do (
         set "key=%%~K"
@@ -419,13 +418,16 @@ for %%I in (%raw_json:,= %) do (
         set "key=!key:"=!"
         set "val=!val:"=!"
         
+        set "val_!key!="
         set "val_!key!=!val!"
         set list=!list! "!key!"
     )
+
 )
 
 if not defined list exit /b 1
 goto :eof
+
 
 
 
@@ -450,14 +452,16 @@ if "%decode_option%"=="Yes" (
     echo %MSG_PREFIX% Secret Keys:
 )
 
-for %%M in (!key_arg!) do (
+
+for %%M in (%key_arg%) do (
 
     set "key="
     set "val="
     set key=%%M
     set val=!val_%%M!
 
-    call :get_length "!key!"
+    set "len="
+    set "len=!len_%%M!"
     set /a diff=max_len - len
     set "spaces="
     for /L %%i in (1,1,!diff!) do set "spaces=!spaces! "
@@ -469,20 +473,45 @@ for %%M in (!key_arg!) do (
 
     if "!decode_option!"=="Yes" (
 
-        set "decoded_val="
-        for /f "tokens=* delims=" %%x in ('echo !val! ^| base64.exe -d') do (
-            set decoded_val=%%x
-            echo [32m!decoded_val![0m
-        )
+        for /f "tokens=* delims=" %%x in ('echo !val! ^| base64.exe -d') do echo [32m%%x[0m
 
     ) else (
         echo [32m!val![0m
 
     )
 
+    
+)
+:: explicitly exit with 0 code to reset errorlevel because of set /p 
+exit /b 0
+
+
+
+:max_length
+set "list=%~1"
+set "max_len=0"
+for %%M in (%list%) do (
+
+    call :get_length "%%M"
+    set "len_%%M="
+    set "len_%%M=!len!"
+    if !len! gtr !max_len! set "max_len=!len!"
+
 )
 goto :eof
 
+
+
+:get_length
+set "var=%~1"
+set "len=0"
+for /L %%i in (0,1,1024) do (
+    if "!var:~%%i,1!"=="" (
+        set "len=%%i"
+        goto :eof
+    )
+)
+goto :eof
 
 
 
@@ -517,29 +546,4 @@ if !select_item_count! gtr 15 set "select_command=gum.exe filter --limit=%index%
 for /f "usebackq tokens=* delims=" %%a in (`!select_command!`) do set "selected_items=!selected_items! %%a"
 if not defined selected_items exit /b 1
 set "selected=!selected_items:~1!"
-goto :eof
-
-
-
-
-:max_length
-set "list=%~1"
-set "max_len=0"
-for %%M in (%list%) do (
-    call :get_length "%%~M"
-    if !len! gtr !max_len! set "max_len=!len!"
-)
-goto :eof
-
-
-
-:get_length
-set "var=%~1"
-set "len=0"
-for /L %%i in (0,1,1024) do (
-    if "!var:~%%i,1!"=="" (
-        set "len=%%i"
-        goto :eof
-    )
-)
 goto :eof

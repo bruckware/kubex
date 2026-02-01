@@ -140,7 +140,7 @@ get_pod() {
 
     local pod_option selected_pod cont_name options selection
     local pod_ops=("[Return to Main]" "disk_use" "exec" "logs" "labels" "manifest" "describe")
-    local header="${MSG_PREFIX} POD > Inspect:"
+    local header="${MSG_PREFIX} Inspect POD:"
     select_prompt pod_ops pod_option || return 1
 
     [[ "$pod_option" == "[Return to Main]" ]] && return 0
@@ -228,7 +228,7 @@ get_secret() {
 
     local secret_option selected_secret keys decode_option
     local secret_ops=("[Return to Main]" "data" "labels" "manifest" "describe")
-    local header="${MSG_PREFIX} SECRET > Inspect:"
+    local header="${MSG_PREFIX} Inspect SECRET:"
     select_prompt secret_ops secret_option || return 1
 
     [[ "$secret_option" == "[Return to Main]" ]] && return 0
@@ -277,7 +277,7 @@ secret_data() {
     local selected_keys=()
     local decode_option="No"
 
-    mapfile -t keys < <(kubectl get "secret/$selected_secret" -o jsonpath='{.data}' | jq -r 'keys[]')
+    mapfile -t keys < <(kubectl get "secret/$selected_secret" -o go-template='{{range $k, $_ := .data}}{{println $k}}{{end}}')
 
     [[ ${#keys[@]} -eq 0 ]] && { printf '%s\n' "${MSG_PREFIX} No keys found in secret $selected_secret"; return 1; }
     local header="$(printf "%s\n%s" "${MSG_PREFIX} Found ${#keys[@]} keys in ${BRIGHT_WHITE}$selected_secret${RESET} secret." "Select keys (use Space/Tab):")"
@@ -313,6 +313,7 @@ print_secret_keys() {
             printf '%s\n' "${GREEN}$val${RESET}"
         fi
     done
+    
 }
 
 
@@ -320,7 +321,7 @@ print_secret_keys() {
 get_service() {
 
     local options=("[Return to Main]" "labels" "manifest" "describe")
-    local header="${MSG_PREFIX} SERVICE > Inspect:"
+    local header="${MSG_PREFIX} Inspect SERVICE:"
     local service_option selected_service
 
     select_prompt options service_option || return 1
@@ -363,7 +364,7 @@ get_service() {
 get_node() {
 
     local options=("[Return to Main]" "list-wide" "describe" "labels")
-    local header="${MSG_PREFIX} NODE > Inspect:"
+    local header="${MSG_PREFIX} Inspect NODE:"
     local node_option selected_node
 
     select_prompt options node_option || return 1

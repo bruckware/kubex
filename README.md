@@ -14,12 +14,14 @@
 Main motivations behind developing this scripting tool:
 
 - Creating a utility that leverages the native Kubernetes command-line interface for cluster queries
-- Eliminating the need for multiple standalone utilities, each dedicated to a single task
-- Providing an easy-to-customize script that users can easily add other day-to-day queries for their specific workflows
+- Eliminating the need for multiple standalone utilities or plugins, each dedicated to a single task
+- Providing an easy-to-customize script that users can add other day-to-day queries for their specific workflows
 
 
 ## Setup
-On both Windows and Linux, ensure dependencies are installed and simply place the script in PATH to use it. (Windows recommended location: `%USERPROFILE%\AppData\Local\bin`, Linux recommended location: `~/.local/bin/kubex`)
+On both Windows and Linux, ensure dependencies are installed and simply place the script in PATH to use it. Recommended location on Windows and Linux: 
+- `%USERPROFILE%\AppData\Local\bin`
+- `~/.local/bin/kubex`
     
     
 ### Windows (Batch-Script)
@@ -49,7 +51,7 @@ source ~/.bashrc
 - [gum](https://github.com/charmbracelet/gum) → gum (Charmbracelet) for select prompts.
   
 #### Additional dependency only on Windows:
-- `base64` — install using chocolately `choco install base64`
+- `base64` — install via Chocolately `choco install base64`
 
 
 ## Notes

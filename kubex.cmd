@@ -1,7 +1,7 @@
 ::
 ::     script: kubex.cmd
 ::    purpose: Kubernetes inspection tool for Windows Command-Prompt and PowerShell
-::    version: 1.0.0
+::    version: 1.1.0
 ::    license: MIT
 ::     author: Hamed Davodi <retrogaming457 [at] gmail [dot] com>
 :: repository: https://github.com/bruckware/kubex
@@ -9,21 +9,13 @@
 
 
 @echo off
+if not "%CMDEXTVERSION%"=="2" ( 
+    echo ERROR: Command Extentions are not enabled.
+    exit /b 1 2>nul
+)
+
 setlocal EnableDelayedExpansion
 
-call :requirement || goto :eof
-
-:MENU
-call :kubernetes || goto :eof
-goto :MENU
-
-endlocal
-goto :eof
-
-
-
-
-:requirement
 set "ESC="
 set "RESET=%ESC%[0m"
 set "GREEN=%ESC%[32m"
@@ -42,38 +34,41 @@ if not exist "%FINDSTR_EXE%" ( echo %MSG_PREFIX% ERROR: findstr cli was not foun
 
 "%WHERE_EXE%" /q gum.exe || ( echo %MSG_PREFIX% ERROR: gum cli was not found. & exit /b 1 )
 "%WHERE_EXE%" /q kubectl.exe || ( echo %MSG_PREFIX% ERROR: kubectl cli was not found. & exit /b 1 ) 
-goto :eof
 
-
-
-
-
-:kubernetes
-set "options=" switch: CONTEXT" " switch: NAMESPACE" "   view: SECRET" "inspect: POD"  "inspect: SERVICE"  "inspect: NODE" "{exit}""
+:MENU
+set "options=" switch: CONTEXT" " switch: NAMESPACE" "   view: SECRET" " status: CNPG" "inspect: POD" "inspect: SERVICE"  "inspect: NODE" "{exit}""
 set "header=%MSG_PREFIX% Select option:"
-call :select_prompt 1 || exit /b 1
+call :select_prompt 1 || goto :eof
 
 if "%selected%"=="{exit}" (
-    exit /b 1
+    goto :eof
 ) else if "%selected:~-3%"=="EXT" (
-    call :set_context || exit /b 1
+    call :set_context
 
 ) else if "%selected:~-3%"=="ACE" (
-    call :set_namespace || exit /b 1
+    call :set_namespace
 
 ) else if "%selected:~-3%"=="RET" (
-    call :get_secret || exit /b 1
+    call :get_secret
 
 ) else if "%selected:~-3%"=="POD" (
-    call :get_pod || exit /b 1
+    call :get_pod
 
 ) else if "%selected:~-3%"=="ICE" (
-    call :get_service || exit /b 1
+    call :get_service
 
 ) else if "%selected:~-3%"=="ODE" (
-    call :get_node || exit /b 1
+    call :get_node
+
+) else if "%selected:~-3%"=="NPG" (
+    call :get_cnpg
 ) 
+goto :MENU
+
+
+endlocal
 goto :eof
+
 
 
 
@@ -383,6 +378,32 @@ goto :eof
 :secret_describe
 kubectl.exe describe "secret/%selected_secret%"
 goto :eof
+
+
+
+
+:get_cnpg
+"%WHERE_EXE%" /q kubectl-cnpg.exe || ( echo %MSG_PREFIX% ERROR: CNPG plugin was not found. & exit /b 0 )
+
+set "cname="
+for /f "usebackq tokens=1,2*" %%a IN (`kubectl get clusters.postgresql.cnpg.io --all-namespaces --no-headers 2^>^&1`) do ( 
+    
+    if "%%a"=="error:" echo %MSG_PREFIX% ERROR: No CRD type 'clusters' was found. && exit /b 0
+    if "%%a"=="No" echo %MSG_PREFIX% No PostgreSQL Cluster was found. && exit /b 0
+    set "cns_%%b=%%a"
+    set "cname=!cname! %%b"
+
+)
+if not defined cname exit /b 0
+
+set "options=^"[Return to Main^]" !cname:~1!"
+set "header=%MSG_PREFIX% Select PostgreSQL Cluster:"
+call :select_prompt 1 || exit /b 1
+if "%selected%"=="[Return to Main]" exit /b 0
+
+kubectl cnpg status "%selected%" --namespace "!cns_%selected%!" 2>nul
+goto :eof
+
 
 
 

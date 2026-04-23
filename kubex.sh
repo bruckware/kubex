@@ -1,71 +1,13 @@
 #!/usr/bin/env bash
-#
-#     script: kubex.sh
-#    purpose: Kubernetes inspection tool for Linux Bash shell
-#    version: 1.0.0
-#    license: MIT
-#     author: Hamed Davodi <retrogaming457 [at] gmail [dot] com>
-# repository: https://github.com/bruckware/kubex
-#
+##
+##     script: kubex.sh
+##    purpose: Kubernetes inspection tool for Linux Bash shell
+##    version: 1.1.0
+##    license: MIT
+##     author: Hamed Davodi <retrogaming457 [at] gmail [dot] com>
+## repository: https://github.com/bruckware/kubex
+##
 
-
-requirement() {
-
-    ESC=$'\033'
-    RESET="${ESC}[0m"
-    GREEN="${ESC}[32m"
-    WHITE="${ESC}[37m"
-    BLUE="${ESC}[38;2;40;180;255m"
-    BRIGHT_WHITE="${ESC}[97m"
-    MSG_PREFIX="${BLUE}[kubex]${RESET}"
-    export GUM_CHOOSE_HEADER_FOREGROUND="#FF7F27"
-    export GUM_CHOOSE_CURSOR_FOREGROUND="#32B4FF"
-    export GUM_CHOOSE_SELECTED_FOREGROUND="#3282F6"
-
-    local tool
-    for tool in kubectl gum; do
-       command -v "$tool" >/dev/null 2>&1 || {
-          printf '%s\n' "${MSG_PREFIX} ERROR (1): $tool cli not found in PATH."
-          return 1
-       }
-    done
-
-    return 0
-
-}
-
-
-
-kubernetes() {
-
-    while true; do
-        local options=(
-            " switch: CONTEXT"
-            " switch: NAMESPACE"
-            "   view: SECRET"
-            "inspect: POD"
-            "inspect: SERVICE"
-            "inspect: NODE"
-            "{exit}"
-        )
-
-        local header="${MSG_PREFIX} Select option:"
-        local selected
-
-       select_prompt options selected || return 1
-
-        case "$selected" in
-            *POD)        get_pod ;;
-            *SECRET)     get_secret ;;
-            *SERVICE)    get_service ;;
-            *CONTEXT)    set_context ;;
-            *NAMESPACE)  set_namespace ;;
-            *NODE)       get_node ;;
-            {exit})      return 0 ;;
-        esac
-    done
-
-}
 
 
 set_context() {
@@ -95,8 +37,6 @@ set_context() {
     printf '%s\n' "${MSG_PREFIX} current-context set to ${GREEN}${selected}${RESET}"
 
 }
-
-
 
 
 set_namespace() {
@@ -132,15 +72,11 @@ set_namespace() {
 
 
 
-
-
-
-
 get_pod() {
 
     local pod_option selected_pod cont_name options selection
     local pod_ops=("[Return to Main]" "disk_use" "exec" "logs" "labels" "manifest" "describe")
-    local header="${MSG_PREFIX} Inspect POD:"
+    local header="${MSG_PREFIX} POD > Inspect:"
     select_prompt pod_ops pod_option || return 1
 
     [[ "$pod_option" == "[Return to Main]" ]] && return 0
@@ -223,12 +159,11 @@ pod_disk() {
 
 
 
-
 get_secret() {
 
     local secret_option selected_secret keys decode_option
     local secret_ops=("[Return to Main]" "data" "labels" "manifest" "describe")
-    local header="${MSG_PREFIX} Inspect SECRET:"
+    local header="${MSG_PREFIX} SECRET > Inspect:"
     select_prompt secret_ops secret_option || return 1
 
     [[ "$secret_option" == "[Return to Main]" ]] && return 0
@@ -271,16 +206,30 @@ get_secret() {
 }
 
 
+
 secret_data() {
 
-    local keys=()
-    local selected_keys=()
-    local decode_option="No"
+    declare -A secrets_list=()
+    declare -a keys=() 
+    declare -a selected_keys=()
+    local key val decode_option="No"
 
-    mapfile -t keys < <(kubectl get "secret/$selected_secret" -o go-template='{{range $k, $_ := .data}}{{println $k}}{{end}}')
+    while IFS=$'\t' read -r key val; do
+        
+        [[ -z "$key" || -z "$val" ]] && continue
+        secrets_list["$key"]="$val"
 
-    [[ ${#keys[@]} -eq 0 ]] && { printf '%s\n' "${MSG_PREFIX} No keys found in secret $selected_secret"; return 1; }
+    done < <(kubectl get "secret/$selected_secret" -o go-template='{{range $k, $v := .data}}{{printf "%s\t%s\n" $k $v}}{{end}}')
+
+    keys=("${!secrets_list[@]}")
+
+    [[ ${#keys[@]} -eq 0 ]] && {
+        printf '%s\n' "${MSG_PREFIX} No keys found in secret $selected_secret"
+        return 1
+    }
+
     local header="$(printf "%s\n%s" "${MSG_PREFIX} Found ${#keys[@]} keys in ${BRIGHT_WHITE}$selected_secret${RESET} secret." "Select keys (use Space/Tab):")"
+
     local limit=${#keys[@]}
     select_prompt keys selected_keys 2 || return 1
 
@@ -288,15 +237,7 @@ secret_data() {
 
     gum confirm "${MSG_PREFIX} Base64 decode (Yes/No):" && decode_option="Yes"
 
-    print_secret_keys
-
-}
-
-
-print_secret_keys() {
-
-    local max_len=0 key val
-
+    local max_len=0
     for key in "${selected_keys[@]}"; do
         (( ${#key} > max_len )) && max_len=${#key}
     done
@@ -304,16 +245,16 @@ print_secret_keys() {
     printf '%s\n' "${MSG_PREFIX} Secret Keys:"
 
     for key in "${selected_keys[@]}"; do
-        val=$(kubectl get "secret/$selected_secret" -o go-template='{{ index .data "'"$key"'" }}')
-        printf "%${max_len}s: " "$key"
+        val="${secrets_list[$key]}"
 
         if [[ $decode_option == "Yes" ]]; then
-            printf '%s\n' "${GREEN}$(printf '%s' "$val" | base64 -d)${RESET}"
-        else
-            printf '%s\n' "${GREEN}$val${RESET}"
+            val="$(printf '%s' "$val" | base64 -d)"
         fi
+
+        printf "%${max_len}s: %s%s%s\n" "$key" "$GREEN" "$val" "$RESET"
     done
-    
+
+
 }
 
 
@@ -321,7 +262,7 @@ print_secret_keys() {
 get_service() {
 
     local options=("[Return to Main]" "labels" "manifest" "describe")
-    local header="${MSG_PREFIX} Inspect SERVICE:"
+    local header="${MSG_PREFIX} SERVICE > Inspect:"
     local service_option selected_service
 
     select_prompt options service_option || return 1
@@ -361,10 +302,11 @@ get_service() {
 }
 
 
+
 get_node() {
 
     local options=("[Return to Main]" "list-wide" "describe" "labels")
-    local header="${MSG_PREFIX} Inspect NODE:"
+    local header="${MSG_PREFIX} NODE > Inspect:"
     local node_option selected_node
 
     select_prompt options node_option || return 1
@@ -400,6 +342,55 @@ get_node() {
     esac
 
 }
+
+
+
+get_cnpg() {
+
+    command -v kubectl-cnpg >/dev/null 2>&1 || {
+        printf '%s\n' "${MSG_PREFIX} ERROR (5): CNPG Plugin was not found."
+        return 0
+    }
+
+    local -A cluster_ns=()
+    local -a clusters=()
+    local -a lines
+    local line ns name selected
+
+    mapfile -t lines < <(kubectl get clusters.postgresql.cnpg.io --all-namespaces --no-headers 2>&1)
+
+    [[ ${lines[0]} == error:* ]] && {
+        printf '%s\n' "${MSG_PREFIX} ERROR (6): No CRD type 'clusters' was found."
+        return 0
+    }
+
+    [[ ${lines[0]} == No* ]] && {
+        printf '%s\n' "${MSG_PREFIX} ERROR (7): No PostgreSQL Cluster was found."
+        return 0
+    }
+
+    for line in "${lines[@]}"; do
+        read -r ns name _ <<< "$line"
+        cluster_ns["$name"]="$ns"
+        clusters+=("$name")
+    done
+
+    (( ${#clusters[@]} == 0 )) && return 0
+
+    local options=("[Return to Main]" "${clusters[@]}")
+    local header="${MSG_PREFIX} Select PostgreSQL Cluster:"
+
+    select_prompt options selected || return 1
+
+    [[ "$selected" == "[Return to Main]" ]] && return 0
+
+    kubectl cnpg status "$selected" --namespace "${cluster_ns[$selected]}" 2>/dev/null
+
+    return 0
+
+    
+}
+
 
 
 select_prompt() {
@@ -445,10 +436,63 @@ select_prompt() {
 }
 
 
-main(){
 
-    requirement || return 1
-    kubernetes  || return 1
+main(){
+     
+    export LC_ALL=C
+    export LANG=C
+
+    ESC=$'\033'
+    RESET="${ESC}[0m"
+    GREEN="${ESC}[32m"
+    WHITE="${ESC}[37m"
+    BLUE="${ESC}[38;2;40;180;255m"
+    BRIGHT_WHITE="${ESC}[97m"
+    MSG_PREFIX="${BLUE}[kubex]${RESET}"
+    export GUM_CHOOSE_HEADER_FOREGROUND="#FF7F27"
+    export GUM_CHOOSE_CURSOR_FOREGROUND="#32B4FF"
+    export GUM_CHOOSE_SELECTED_FOREGROUND="#3282F6"
+
+    local tool
+    for tool in kubectl gum; do
+       command -v "$tool" >/dev/null 2>&1 || {
+          printf '%s\n' "${MSG_PREFIX} ERROR (1): $tool cli not found in PATH."
+          return 1
+       }
+    done
+
+
+    while true; do
+        local options=(
+            " switch: CONTEXT"
+            " switch: NAMESPACE"
+            "   view: SECRET"
+            " status: CNPG"
+            "inspect: POD"
+            "inspect: SERVICE"
+            "inspect: NODE"
+            "{exit}"
+        )
+
+        local header="${MSG_PREFIX} Select option:"
+        local selected
+
+       select_prompt options selected || return 1
+
+        case "$selected" in
+            *POD)        get_pod ;;
+            *CNPG)       get_cnpg ;;
+            *SECRET)     get_secret ;;
+            *SERVICE)    get_service ;;
+            *CONTEXT)    set_context ;;
+            *NAMESPACE)  set_namespace ;;
+            *NODE)       get_node ;;
+            {exit})      return 0 ;;
+        esac
+    done
+
+
+    return 0
 
 }
 
